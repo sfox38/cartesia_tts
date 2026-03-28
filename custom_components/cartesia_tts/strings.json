@@ -1,0 +1,91 @@
+{
+  "title": "Cartesia Sonic TTS",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Cartesia",
+        "description": "Enter your Cartesia API key. You can find or create it at [play.cartesia.ai/keys](https://play.cartesia.ai/keys).",
+        "data": {
+          "api_key": "Cartesia API Key"
+        }
+      },
+      "model": {
+        "title": "Select a voice model",
+        "description": "Choose the Sonic model to use. Click Submit to continue to language and generation settings.",
+        "data": {
+          "select_model": "Voice Model"
+        }
+      },
+      "settings": {
+        "title": "Language and generation settings",
+        "description": "Configure defaults for {model}.",
+        "data": {
+          "default_language": "Default Language",
+          "default_speed": "Default Speed",
+          "default_volume": "Default Volume",
+          "default_emotion": "Default Emotion",
+          "voice_action": "Next step"
+        },
+        "data_description": {
+          "default_speed": "Speed multiplier: 0.6 slowest, 1.0 normal, 1.5 fastest.",
+          "default_volume": "Volume multiplier: 0.5 quietest, 1.0 normal, 2.0 loudest.",
+          "default_emotion": "Emotional tone guidance. Applies to Sonic 3 and Sonic Turbo."
+        }
+      },
+      "voice": {
+        "title": "Select a default voice",
+        "description": "Showing {voice_count} voices for {language}. Select a voice and click Submit to save, or select 'Go back to settings' to return.",
+        "data": {
+          "default_voice": "Default Voice",
+          "voice_action": "Action"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "That API key was not accepted by Cartesia. Please double-check your key at play.cartesia.ai/keys and try again.",
+      "cannot_connect": "Could not reach the Cartesia API. Please check your internet connection and try again.",
+      "voice_required": "Please select a voice before saving."
+    },
+    "abort": {
+      "already_configured": "Cartesia Sonic TTS is already configured. Only one instance is supported. To change settings, use the Configure button on the existing integration."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Select a voice model",
+        "description": "Choose the Sonic model to use. Click Submit to continue to language and generation settings.",
+        "data": {
+          "select_model": "Voice Model"
+        }
+      },
+      "settings": {
+        "title": "Language and generation settings",
+        "description": "Configure defaults for {model}.",
+        "data": {
+          "default_language": "Default Language",
+          "default_speed": "Default Speed",
+          "default_volume": "Default Volume",
+          "default_emotion": "Default Emotion",
+          "voice_action": "Next step"
+        },
+        "data_description": {
+          "default_speed": "Speed multiplier: 0.6 slowest, 1.0 normal, 1.5 fastest.",
+          "default_volume": "Volume multiplier: 0.5 quietest, 1.0 normal, 2.0 loudest.",
+          "default_emotion": "Emotional tone guidance. Applies to Sonic 3 and Sonic Turbo."
+        }
+      },
+      "voice": {
+        "title": "Select a default voice",
+        "description": "Showing {voice_count} voices for {language}. Select a voice and click Submit to save, or select 'Go back to settings' to return.",
+        "data": {
+          "default_voice": "Default Voice",
+          "voice_action": "Action"
+        }
+      }
+    },
+    "error": {
+      "voice_required": "Please select a voice before saving."
+    }
+  }
+}
