@@ -2,6 +2,9 @@
 
 A Home Assistant custom integration that connects to the [Cartesia Sonic](https://cartesia.ai) text-to-speech API, giving HA access to Cartesia's library of 600+ voices across 42 languages with fine-grained control over speed, volume, and emotion.
 
+> [!NOTE]
+> This is preliminary documentation, there may still be errors or omissions
+
 > **Disclaimer:** This is an unofficial, community-developed integration. It is not affiliated with, endorsed by, or supported by Cartesia AI. For Cartesia API support, visit [cartesia.ai](https://cartesia.ai) or their [Discord](https://discord.gg/cartesia). For integration issues, please open a GitHub issue on this repository.
 ## Features
 
