@@ -126,10 +126,17 @@ class VoiceCache:
         return {v["id"]: v.get("name", v["id"]) for v in voices if "id" in v}
 
     def _voice_supports_language(self, voice: dict[str, Any], language: str) -> bool:
-        """Return True if this voice's language field starts with the given code."""
+        """Return True if this voice supports the given ISO 639-1 language code.
+
+        Matches exact codes ("en") and dialect variants ("en-US", "en-GB") but
+        not unrelated codes that happen to share a prefix ("eng").
+        """
+        def _matches(voice_lang: str) -> bool:
+            return voice_lang == language or voice_lang.startswith(language + "-")
+
         voice_lang = voice.get("language", "")
         if isinstance(voice_lang, str):
-            return voice_lang.startswith(language)
+            return _matches(voice_lang)
         if isinstance(voice_lang, list):
-            return any(lang.startswith(language) for lang in voice_lang)
+            return any(_matches(lang) for lang in voice_lang)
         return False

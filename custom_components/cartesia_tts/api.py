@@ -4,6 +4,19 @@ Encapsulates all network I/O. The rest of the integration never imports
 aiohttp directly; it calls methods on CartesiaClient instead.
 
 API reference: https://docs.cartesia.ai/api-reference/tts/bytes
+
+Error handling
+--------------
+The Cartesia API returns structured JSON errors (Cartesia-Version 2026-03-01+):
+  {
+    "error_code": "quota_exceeded",
+    "title": "Quota exceeded",
+    "message": "You have exceeded your plan's credit quota.",
+    "request_id": "..."
+  }
+
+Actionable error codes are mapped to specific exception subclasses so callers
+can handle them distinctly. All others fall through to CartesiaApiError.
 """
 
 from __future__ import annotations
@@ -29,7 +42,53 @@ class CartesiaApiError(Exception):
 
 
 class CartesiaAuthError(CartesiaApiError):
-    """Raised specifically on HTTP 401 - invalid or expired API key."""
+    """Raised on HTTP 401 - invalid or expired API key."""
+
+
+class CartesiaQuotaError(CartesiaApiError):
+    """Raised when the account has exhausted its credit quota (error_code: quota_exceeded)."""
+
+
+class CartesiaConcurrencyError(CartesiaApiError):
+    """Raised when the plan's concurrent request limit is exceeded (error_code: concurrency_limited)."""
+
+
+class CartesiaPlanError(CartesiaApiError):
+    """Raised when the requested feature requires a plan upgrade (error_code: plan_upgrade_required)."""
+
+
+def _parse_error(status: int, body: str) -> CartesiaApiError:
+    """Parse a Cartesia error response body and return the appropriate exception.
+
+    Attempts to parse the body as JSON and extract the error_code field.
+    Falls back to a generic CartesiaApiError if the body is not valid JSON
+    or does not contain a known error_code.
+    """
+    try:
+        data = json.loads(body)
+        error_code = data.get("error_code", "")
+        message = data.get("message") or data.get("title") or body
+    except (json.JSONDecodeError, AttributeError):
+        error_code = ""
+        message = body
+
+    full_message = f"HTTP {status}: {message}"
+
+    if error_code == "quota_exceeded":
+        return CartesiaQuotaError(
+            f"{full_message} - Your Cartesia credit quota is exhausted. "
+            "Visit play.cartesia.ai to check your plan."
+        )
+    if error_code == "concurrency_limited":
+        return CartesiaConcurrencyError(
+            f"{full_message} - Too many concurrent requests for your plan."
+        )
+    if error_code == "plan_upgrade_required":
+        return CartesiaPlanError(
+            f"{full_message} - This feature requires a higher Cartesia plan."
+        )
+
+    return CartesiaApiError(full_message)
 
 
 class CartesiaClient:
@@ -41,6 +100,7 @@ class CartesiaClient:
     """
 
     def __init__(self, api_key: str, session: aiohttp.ClientSession) -> None:
+        """Initialise the client with an API key and a shared aiohttp session."""
         self._api_key = api_key
         self._session = session
         # Headers sent on every request.
@@ -62,7 +122,8 @@ class CartesiaClient:
                 if resp.status == 401:
                     raise CartesiaAuthError("Invalid API key")
                 if resp.status != 200:
-                    raise CartesiaApiError(f"API returned status {resp.status}")
+                    body = await resp.text()
+                    raise _parse_error(resp.status, body)
                 return True
         except aiohttp.ClientError as err:
             raise CartesiaApiError(f"Connection error: {err}") from err
@@ -97,9 +158,7 @@ class CartesiaClient:
                         raise CartesiaAuthError("Invalid API key")
                     if resp.status != 200:
                         body = await resp.text()
-                        raise CartesiaApiError(
-                            f"Failed to fetch voices: status {resp.status}, body: {body}"
-                        )
+                        raise _parse_error(resp.status, body)
                     raw_text = await resp.text()
                     data = json.loads(raw_text)
 
@@ -159,7 +218,8 @@ class CartesiaClient:
         the model's natural emotional interpretation.
 
         Returns raw MP3 audio bytes on success.
-        Raises CartesiaAuthError or CartesiaApiError on failure.
+        Raises a CartesiaApiError subclass on failure (see module docstring
+        for the full error class hierarchy).
         """
         url = f"{CARTESIA_API_BASE}{CARTESIA_TTS_ENDPOINT}"
 
@@ -200,9 +260,7 @@ class CartesiaClient:
                     raise CartesiaAuthError("Invalid API key")
                 if resp.status != 200:
                     body = await resp.text()
-                    raise CartesiaApiError(
-                        f"TTS request failed: status {resp.status}, body: {body}"
-                    )
+                    raise _parse_error(resp.status, body)
                 return await resp.read()
         except aiohttp.ClientError as err:
             raise CartesiaApiError(f"Connection error during synthesis: {err}") from err

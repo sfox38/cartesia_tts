@@ -38,8 +38,6 @@ ATTR_MODEL = "model"
 
 # Available Cartesia TTS models. Keys are API model_id values; values are
 # human-readable labels shown in the config flow.
-# sonic-2 was removed: its generation_config support was dropped after
-# sonic-2-2025-03-07 and it offers no advantage over sonic-turbo.
 MODELS = {
     "sonic-3": "Sonic 3 (recommended, 90ms latency, 42 languages)",
     "sonic-turbo": "Sonic Turbo (40ms latency, 15 languages, less emotive)",
@@ -186,69 +184,6 @@ SONIC3_EMOTIONS = [
     "wistful",
 ]
 
-# Display labels for SONIC3_EMOTIONS, used in vol.In() so the config flow
-# dropdown shows title-cased names while the stored/API value stays lowercase.
-SONIC3_EMOTIONS_DISPLAY = {
-    "affectionate": "Affectionate",
-    "agitated": "Agitated",
-    "alarmed": "Alarmed",
-    "amazed": "Amazed",
-    "angry": "Angry",
-    "anticipation": "Anticipation",
-    "anxious": "Anxious",
-    "apologetic": "Apologetic",
-    "bored": "Bored",
-    "calm": "Calm",
-    "confident": "Confident",
-    "confused": "Confused",
-    "contemplative": "Contemplative",
-    "contempt": "Contempt",
-    "content": "Content",
-    "curious": "Curious",
-    "dejected": "Dejected",
-    "determined": "Determined",
-    "disappointed": "Disappointed",
-    "disgusted": "Disgusted",
-    "distant": "Distant",
-    "elated": "Elated",
-    "enthusiastic": "Enthusiastic",
-    "envious": "Envious",
-    "euphoric": "Euphoric",
-    "excited": "Excited",
-    "flirtatious": "Flirtatious",
-    "frustrated": "Frustrated",
-    "grateful": "Grateful",
-    "guilty": "Guilty",
-    "happy": "Happy",
-    "hesitant": "Hesitant",
-    "hurt": "Hurt",
-    "insecure": "Insecure",
-    "ironic": "Ironic",
-    "joking/comedic": "Joking/Comedic",
-    "mad": "Mad",
-    "melancholic": "Melancholic",
-    "mysterious": "Mysterious",
-    "neutral": "Neutral",
-    "nostalgic": "Nostalgic",
-    "outraged": "Outraged",
-    "panicked": "Panicked",
-    "peaceful": "Peaceful",
-    "proud": "Proud",
-    "rejected": "Rejected",
-    "resigned": "Resigned",
-    "sad": "Sad",
-    "sarcastic": "Sarcastic",
-    "scared": "Scared",
-    "serene": "Serene",
-    "skeptical": "Skeptical",
-    "surprised": "Surprised",
-    "sympathetic": "Sympathetic",
-    "threatened": "Threatened",
-    "tired": "Tired",
-    "triumphant": "Triumphant",
-    "trust": "Trust",
-    "wistful": "Wistful",
-}
 
 # Default values used when no user preference has been set.
 DEFAULT_MODEL = "sonic-3"

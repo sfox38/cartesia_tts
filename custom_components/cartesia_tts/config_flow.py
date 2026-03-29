@@ -71,7 +71,6 @@ from .const import (
     LANGUAGES,
     LANGUAGES_BY_MODEL,
     SONIC3_EMOTIONS,
-    SONIC3_EMOTIONS_DISPLAY,
     DEFAULT_MODEL,
     DEFAULT_LANGUAGE,
     DEFAULT_SPEED,
@@ -176,7 +175,7 @@ def _settings_schema(model: str, defaults: dict | None = None) -> vol.Schema:
             vol.Required(CONF_DEFAULT_LANGUAGE, default=lang_default): vol.In(languages),
             vol.Optional(CONF_DEFAULT_SPEED, default=d.get(CONF_DEFAULT_SPEED, DEFAULT_SPEED)): _speed_selector(),
             vol.Optional(CONF_DEFAULT_VOLUME, default=d.get(CONF_DEFAULT_VOLUME, DEFAULT_VOLUME)): _volume_selector(),
-            vol.Optional(CONF_DEFAULT_EMOTION, default=d.get(CONF_DEFAULT_EMOTION, DEFAULT_EMOTION)): vol.In(SONIC3_EMOTIONS_DISPLAY),
+            vol.Optional(CONF_DEFAULT_EMOTION, default=d.get(CONF_DEFAULT_EMOTION, DEFAULT_EMOTION)): vol.In({e: e.title() for e in SONIC3_EMOTIONS}),
             vol.Required("voice_action", default="continue"): vol.In({
                 "continue": "Continue to voice selection",
                 "go_back": "Go back to model selection",
@@ -204,15 +203,19 @@ def _voice_schema(voices: dict[str, str], current_voice: str = "none") -> vol.Sc
 
 
 def _filter_voices_by_language(voices_raw: list[dict], language: str) -> dict[str, str]:
-    """Filter a raw voice list to those matching the given ISO language code.
+    """Filter a raw voice list to those matching the given ISO 639-1 language code.
 
-    Uses prefix matching so "en" matches voices tagged "en", "en-US", etc.
+    Matches exact codes ("en") and dialect variants ("en-US", "en-GB") but not
+    unrelated codes that share a prefix ("eng" does not match "en").
     Returns {voice_id: voice_name}.
     """
+    def _matches(voice_lang: str) -> bool:
+        return voice_lang == language or voice_lang.startswith(language + "-")
+
     return {
         v["id"]: v.get("name", v["id"])
         for v in voices_raw
-        if "id" in v and str(v.get("language", "")).startswith(language)
+        if "id" in v and _matches(str(v.get("language", "")))
     }
 
 
@@ -224,9 +227,15 @@ class CartesiaTTSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
       _voices_raw     - full voice list fetched after key validation
       _pending_model  - model chosen in step 2, used to filter languages in step 3
       _pending_settings - form values from step 3, used to build entry.options
+
+    VERSION is incremented for breaking schema changes (requires migration).
+    MINOR_VERSION is incremented for backwards-compatible additions (new
+    optional keys with defaults). async_migrate_entry in __init__.py handles
+    all migrations.
     """
 
     VERSION = 1
+    MINOR_VERSION = 1
 
     def __init__(self) -> None:
         self._api_key: str = ""
@@ -354,7 +363,10 @@ class CartesiaTTSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     description_placeholders={"voice_count": str(len(filtered)), "language": lang_label},
                 )
 
-            all_voices = {v["id"]: v.get("name", v["id"]) for v in self._voices_raw if "id" in v}
+            # filtered is already {id: name} for the current language; fall back
+            # to a full scan of _voices_raw if the voice isn't in the filtered set
+            # (e.g. user typed an override ID not in the current language).
+            all_voices = {**{v["id"]: v.get("name", v["id"]) for v in self._voices_raw if "id" in v}, **filtered}
             return self.async_create_entry(
                 title="Cartesia Sonic TTS",
                 data={CONF_API_KEY: self._api_key},
@@ -362,7 +374,7 @@ class CartesiaTTSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_MODEL: self._pending_model,
                     CONF_LANGUAGE: lang,
                     CONF_VOICE_ID: voice_id,
-                    CONF_VOICE_NAME: all_voices.get(voice_id, ""),
+                    CONF_VOICE_NAME: all_voices.get(voice_id, voice_id),
                     CONF_SPEED: float(self._pending_settings.get(CONF_DEFAULT_SPEED, DEFAULT_SPEED)),
                     CONF_VOLUME: float(self._pending_settings.get(CONF_DEFAULT_VOLUME, DEFAULT_VOLUME)),
                     CONF_EMOTION: self._pending_settings.get(CONF_DEFAULT_EMOTION, DEFAULT_EMOTION),
@@ -507,12 +519,12 @@ class CartesiaTTSOptionsFlow(config_entries.OptionsFlow):
                     description_placeholders={"voice_count": str(len(filtered)), "language": lang_label},
                 )
 
-            all_voices = {v["id"]: v.get("name", v["id"]) for v in voices_raw if "id" in v}
+            all_voices = {**{v["id"]: v.get("name", v["id"]) for v in voices_raw if "id" in v}, **filtered}
             return self.async_create_entry(title="", data={
                 CONF_MODEL: self._pending_model,
                 CONF_LANGUAGE: lang,
                 CONF_VOICE_ID: voice_id,
-                CONF_VOICE_NAME: all_voices.get(voice_id, current.get(CONF_VOICE_NAME, "")),
+                CONF_VOICE_NAME: all_voices.get(voice_id, current.get(CONF_VOICE_NAME, voice_id)),
                 CONF_SPEED: float(self._pending_settings.get(CONF_DEFAULT_SPEED, current.get(CONF_SPEED, DEFAULT_SPEED))),
                 CONF_VOLUME: float(self._pending_settings.get(CONF_DEFAULT_VOLUME, current.get(CONF_VOLUME, DEFAULT_VOLUME))),
                 CONF_EMOTION: self._pending_settings.get(CONF_DEFAULT_EMOTION, current.get(CONF_EMOTION, DEFAULT_EMOTION)),

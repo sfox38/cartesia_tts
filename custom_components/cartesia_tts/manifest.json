@@ -1,13 +1,14 @@
 {
   "domain": "cartesia_tts",
   "name": "Cartesia Sonic TTS",
-  "version": "1.0.0",
-  "documentation": "https://docs.cartesia.ai",
-  "issue_tracker": "",
-  "requirements": ["aiohttp>=3.9.0"],
+  "version": "1.0.1",
+  "documentation": "https://github.com/sfox38/cartesia_tts",
+  "issue_tracker": "https://github.com/sfox38/cartesia_tts/issues",
+  "requirements": [],
   "dependencies": [],
-  "codeowners": [],
+  "codeowners": [
+    "@sfox38"
+  ],
   "config_flow": true,
-  "iot_class": "cloud_polling",
-  "quality_scale": "custom"
+  "iot_class": "cloud_polling"
 }

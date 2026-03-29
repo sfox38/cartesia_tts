@@ -29,6 +29,13 @@ embedded in the text are honoured by the API, for example:
   <emotion value="angry"/> How dare you!
   <speed ratio="1.5"/> I speak quickly.
   [laughter] That is hilarious.
+
+Option validation
+-----------------
+All options passed via tts.speak are validated before the API call.
+Invalid values produce a WARNING log showing the received value, the
+valid options, and the fallback being used. Synthesis still proceeds
+using the configured default rather than failing the call entirely.
 """
 
 from __future__ import annotations
@@ -63,6 +70,7 @@ from .const import (
     LANGUAGES,
     SONIC3_LANGUAGES,
     SONIC3_EMOTIONS,
+    MODELS,
     DEFAULT_MODEL,
     DEFAULT_LANGUAGE,
     DEFAULT_SPEED,
@@ -73,7 +81,7 @@ from .const import (
     VOLUME_MIN,
     VOLUME_MAX,
 )
-from .api import CartesiaClient, CartesiaApiError
+from .api import CartesiaClient, CartesiaApiError, CartesiaQuotaError, CartesiaConcurrencyError, CartesiaPlanError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,6 +97,136 @@ async def async_setup_entry(
     voice_cache = data["voice_cache"]
 
     async_add_entities([CartesiaTTSEntity(config_entry, client, voice_cache)])
+
+
+def _validate_options(
+    opts: dict[str, Any],
+    config_opts: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate tts.speak options and return sanitised values.
+
+    For each parameter, resolution order is:
+      1. Value in opts (per-call override) - validated here
+      2. Value in config_opts (user default from Configure dialog)
+      3. Hard-coded DEFAULT_* constant
+
+    Invalid overrides produce a WARNING and fall back to the configured
+    default. Speed and volume are additionally clamped to the API bounds
+    even when valid, since the config flow slider enforces this already
+    but direct service calls bypass it.
+
+    Returns a dict with keys: model, voice_id, language, speed, volume, emotion.
+    All values are guaranteed to be safe to send to the API.
+    """
+    result: dict[str, Any] = {}
+
+    # model
+    if ATTR_MODEL in opts:
+        val = opts[ATTR_MODEL]
+        if val not in MODELS:
+            fallback = config_opts.get(CONF_MODEL, DEFAULT_MODEL)
+            _LOGGER.warning(
+                "Cartesia TTS: invalid model %r. Valid options: %s. Using configured default %r.",
+                val, list(MODELS.keys()), fallback,
+            )
+            result["model"] = fallback
+        else:
+            result["model"] = val
+    else:
+        result["model"] = config_opts.get(CONF_MODEL, DEFAULT_MODEL)
+
+    # voice_id - just check it's a non-empty string if provided
+    if ATTR_VOICE_ID in opts:
+        val = opts[ATTR_VOICE_ID]
+        if not isinstance(val, str) or not val.strip():
+            fallback = config_opts.get(CONF_VOICE_ID, "")
+            _LOGGER.warning(
+                "Cartesia TTS: invalid voice_id %r (must be a non-empty string). Using configured default.",
+                val,
+            )
+            result["voice_id"] = fallback
+        else:
+            result["voice_id"] = val.strip()
+    else:
+        result["voice_id"] = config_opts.get(CONF_VOICE_ID, "")
+
+    # language
+    if ATTR_LANGUAGE in opts:
+        val = opts[ATTR_LANGUAGE]
+        if val not in SONIC3_LANGUAGES:
+            fallback = config_opts.get(CONF_LANGUAGE, DEFAULT_LANGUAGE)
+            _LOGGER.warning(
+                "Cartesia TTS: invalid language %r. Valid options: %s. Using configured default %r.",
+                val, list(SONIC3_LANGUAGES.keys()), fallback,
+            )
+            result["language"] = fallback
+        else:
+            result["language"] = val
+    else:
+        result["language"] = config_opts.get(CONF_LANGUAGE, DEFAULT_LANGUAGE)
+
+    # speed - must be numeric, will be clamped to [SPEED_MIN, SPEED_MAX]
+    if ATTR_SPEED in opts:
+        try:
+            val = float(opts[ATTR_SPEED])
+            if val < SPEED_MIN or val > SPEED_MAX:
+                clamped = max(SPEED_MIN, min(SPEED_MAX, val))
+                _LOGGER.warning(
+                    "Cartesia TTS: speed %s is outside the valid range [%s, %s]. Clamping to %s.",
+                    val, SPEED_MIN, SPEED_MAX, clamped,
+                )
+                result["speed"] = clamped
+            else:
+                result["speed"] = val
+        except (TypeError, ValueError):
+            fallback = float(config_opts.get(CONF_SPEED, DEFAULT_SPEED))
+            _LOGGER.warning(
+                "Cartesia TTS: speed %r is not a valid number. Using configured default %s.",
+                opts[ATTR_SPEED], fallback,
+            )
+            result["speed"] = fallback
+    else:
+        result["speed"] = float(config_opts.get(CONF_SPEED, DEFAULT_SPEED))
+
+    # volume - must be numeric, will be clamped to [VOLUME_MIN, VOLUME_MAX]
+    if ATTR_VOLUME in opts:
+        try:
+            val = float(opts[ATTR_VOLUME])
+            if val < VOLUME_MIN or val > VOLUME_MAX:
+                clamped = max(VOLUME_MIN, min(VOLUME_MAX, val))
+                _LOGGER.warning(
+                    "Cartesia TTS: volume %s is outside the valid range [%s, %s]. Clamping to %s.",
+                    val, VOLUME_MIN, VOLUME_MAX, clamped,
+                )
+                result["volume"] = clamped
+            else:
+                result["volume"] = val
+        except (TypeError, ValueError):
+            fallback = float(config_opts.get(CONF_VOLUME, DEFAULT_VOLUME))
+            _LOGGER.warning(
+                "Cartesia TTS: volume %r is not a valid number. Using configured default %s.",
+                opts[ATTR_VOLUME], fallback,
+            )
+            result["volume"] = fallback
+    else:
+        result["volume"] = float(config_opts.get(CONF_VOLUME, DEFAULT_VOLUME))
+
+    # emotion
+    if ATTR_EMOTION in opts:
+        val = opts[ATTR_EMOTION]
+        if val not in SONIC3_EMOTIONS:
+            fallback = config_opts.get(CONF_EMOTION, DEFAULT_EMOTION)
+            _LOGGER.warning(
+                "Cartesia TTS: invalid emotion %r. Valid options: %s. Using configured default %r.",
+                val, SONIC3_EMOTIONS, fallback,
+            )
+            result["emotion"] = fallback
+        else:
+            result["emotion"] = val
+    else:
+        result["emotion"] = config_opts.get(CONF_EMOTION, DEFAULT_EMOTION)
+
+    return result
 
 
 class CartesiaTTSEntity(TextToSpeechEntity):
@@ -107,11 +245,14 @@ class CartesiaTTSEntity(TextToSpeechEntity):
     _attr_name = "Cartesia Sonic TTS"
 
     def __init__(self, config_entry: ConfigEntry, client: CartesiaClient, voice_cache) -> None:
+        """Initialise the TTS entity with the config entry, API client, and voice cache.
+
+        The unique_id ties this entity to the config entry so HA can track it
+        across restarts and renames.
+        """
         self._config_entry = config_entry
         self._client = client
         self._voice_cache = voice_cache
-        # Unique ID ties the entity to the config entry so HA can track it
-        # across restarts and renames.
         self._attr_unique_id = f"{config_entry.entry_id}_tts"
 
     @property
@@ -157,54 +298,58 @@ class CartesiaTTSEntity(TextToSpeechEntity):
     ) -> TtsAudioType:
         """Synthesize speech and return (format, audio_bytes).
 
-        Resolution order for each parameter:
-          1. Value in options dict (per-call override)
-          2. Value in config entry options (user default)
-          3. Hard-coded default from const.py
-
-        Speed and volume are clamped to Cartesia's accepted range to prevent
-        API errors when values are passed outside bounds.
+        All options are validated before the API call. Invalid values produce
+        a WARNING log and fall back to the configured default. Synthesis
+        always proceeds unless voice_id is missing entirely.
 
         Returns (None, None) on error so HA can handle the failure gracefully.
         """
         opts = options or {}
-        config_opts = self._config_entry.options
 
-        model = opts.get(ATTR_MODEL, config_opts.get(CONF_MODEL, DEFAULT_MODEL))
-        voice_id = opts.get(ATTR_VOICE_ID, config_opts.get(CONF_VOICE_ID, ""))
-        lang = opts.get(ATTR_LANGUAGE, language or config_opts.get(CONF_LANGUAGE, DEFAULT_LANGUAGE))
-        speed = self._clamp(
-            float(opts.get(ATTR_SPEED, config_opts.get(CONF_SPEED, DEFAULT_SPEED))),
-            SPEED_MIN,
-            SPEED_MAX,
-        )
-        volume = self._clamp(
-            float(opts.get(ATTR_VOLUME, config_opts.get(CONF_VOLUME, DEFAULT_VOLUME))),
-            VOLUME_MIN,
-            VOLUME_MAX,
-        )
-        emotion = opts.get(ATTR_EMOTION, config_opts.get(CONF_EMOTION, DEFAULT_EMOTION))
+        # If language comes from HA (not from options dict), inject it so
+        # _validate_options can treat it as a per-call override.
+        if ATTR_LANGUAGE not in opts and language:
+            opts = {**opts, ATTR_LANGUAGE: language}
 
-        if not voice_id:
+        validated = _validate_options(opts, self._config_entry.options)
+
+        if not validated["voice_id"]:
             _LOGGER.error("Cartesia TTS: no voice_id configured, cannot synthesize")
             return None, None
 
         _LOGGER.debug(
             "Cartesia TTS synthesize: model=%s voice=%s lang=%s speed=%s volume=%s emotion=%s",
-            model, voice_id, lang, speed, volume, emotion,
+            validated["model"], validated["voice_id"], validated["language"],
+            validated["speed"], validated["volume"], validated["emotion"],
         )
 
         try:
             audio_bytes = await self._client.synthesize(
                 transcript=message,
-                model=model,
-                voice_id=voice_id,
-                language=lang,
-                speed=speed,
-                volume=volume,
-                emotion=emotion,
+                model=validated["model"],
+                voice_id=validated["voice_id"],
+                language=validated["language"],
+                speed=validated["speed"],
+                volume=validated["volume"],
+                emotion=validated["emotion"],
             )
             return "mp3", audio_bytes
+        except CartesiaQuotaError as err:
+            _LOGGER.error(
+                "Cartesia TTS: credit quota exhausted. Visit play.cartesia.ai to check your plan. (%s)",
+                err,
+            )
+            return None, None
+        except CartesiaConcurrencyError as err:
+            _LOGGER.warning(
+                "Cartesia TTS: concurrency limit reached, request dropped. (%s)", err
+            )
+            return None, None
+        except CartesiaPlanError as err:
+            _LOGGER.error(
+                "Cartesia TTS: feature not available on current plan. (%s)", err
+            )
+            return None, None
         except CartesiaApiError as err:
             _LOGGER.error("Cartesia TTS synthesis failed: %s", err)
             return None, None
@@ -225,7 +370,3 @@ class CartesiaTTSEntity(TextToSpeechEntity):
             for v in voices
             if "id" in v
         ]
-
-    def _clamp(self, value: float, min_val: float, max_val: float) -> float:
-        """Clamp value to [min_val, max_val]."""
-        return max(min_val, min(max_val, value))
