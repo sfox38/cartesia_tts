@@ -198,7 +198,7 @@ The Cartesia API does not expose dialect codes (e.g. `en-AU`) in the synthesis r
 
 **Voice Cache Behaviour**: The integration does not fetch the voice list on HA restart. The cache starts empty and is populated only when you open the Configure dialog and reach the voice selection step. This may take several seconds. Since the cache is only cleared on a HA restart, any voices Cartesia has added since your last session will appear automatically the next time you open Configure.
 
-**HA logs show a synthesis error**: Enable debug logging for the integration and check the payload logged before the API call:
+**No audio output or other unexpected behaviour**: Check Settings -> System -> Logs in the HA UI, or open /config/home-assistant.log. Error and warning messages from this integration are always logged at standard level with no configuration needed. If you need more detail (such as the exact request being sent to Cartesia), add the following to your configuration.yaml and restart HA:
 
 ```yaml
 logger:
