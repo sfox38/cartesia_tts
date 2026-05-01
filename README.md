@@ -39,7 +39,7 @@ A Home Assistant custom integration that connects to the [Cartesia Sonic](https:
 ### Manual Installation
 
 1. Download the latest release zip from this repository and unpack it.
-2. Copy the `tiktoktts` folder into your `config/custom_components/` directory. The result should be `config/custom_components/cartesia_tts/`.
+2. Copy the `cartesia_tts` folder into your `config/custom_components/` directory. The result should be `config/custom_components/cartesia_tts/`.
 3. Restart Home Assistant.
 
 ---
