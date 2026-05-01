@@ -2,7 +2,7 @@
 
 Initial setup flow (CartesiaTTSConfigFlow)
 ------------------------------------------
-Three steps, each rendered as a separate HA dialog page:
+Four steps, each rendered as a separate HA dialog page:
 
   Step 1 - user:     Enter API key. Validates against Cartesia and fetches
                      the full voice list before advancing.
@@ -15,7 +15,7 @@ Three steps, each rendered as a separate HA dialog page:
 
 Reconfigure flow (CartesiaTTSOptionsFlow)
 -----------------------------------------
-Same three-step structure as the setup flow but using the existing config
+Three-step structure (model, settings, voice) using the existing config
 entry's options as pre-filled defaults. The API key is never re-requested.
 
 Navigation rationale
@@ -29,8 +29,7 @@ Form field naming
 -----------------
 Form fields use distinct names from storage keys (e.g. "select_model" in
 the form vs "model" stored in entry.options). This prevents any confusion
-between the intermediate form state and what is persisted. The _extract_*
-helpers perform the translation before calling async_create_entry.
+between the intermediate form state and what is persisted.
 """
 
 from __future__ import annotations
@@ -202,20 +201,33 @@ def _voice_schema(voices: dict[str, str], current_voice: str = "none") -> vol.Sc
     )
 
 
+def _lang_matches(voice_lang: str, language: str) -> bool:
+    """Return True if voice_lang matches the ISO 639-1 code exactly or as a dialect prefix."""
+    return voice_lang == language or voice_lang.startswith(language + "-")
+
+
+def _voice_supports_language(voice: dict, language: str) -> bool:
+    """Return True if a voice supports the given language code.
+
+    Handles both string and list language fields from the Cartesia API.
+    """
+    voice_lang = voice.get("language", "")
+    if isinstance(voice_lang, str):
+        return _lang_matches(voice_lang, language)
+    if isinstance(voice_lang, list):
+        return any(_lang_matches(lang, language) for lang in voice_lang)
+    return False
+
+
 def _filter_voices_by_language(voices_raw: list[dict], language: str) -> dict[str, str]:
     """Filter a raw voice list to those matching the given ISO 639-1 language code.
 
-    Matches exact codes ("en") and dialect variants ("en-US", "en-GB") but not
-    unrelated codes that share a prefix ("eng" does not match "en").
     Returns {voice_id: voice_name}.
     """
-    def _matches(voice_lang: str) -> bool:
-        return voice_lang == language or voice_lang.startswith(language + "-")
-
     return {
         v["id"]: v.get("name", v["id"])
         for v in voices_raw
-        if "id" in v and _matches(str(v.get("language", "")))
+        if "id" in v and _voice_supports_language(v, language)
     }
 
 
@@ -342,6 +354,14 @@ class CartesiaTTSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         filtered = _filter_voices_by_language(self._voices_raw, lang)
         lang_label = _languages_for_model(self._pending_model).get(lang, lang)
 
+        if not filtered:
+            return self.async_show_form(
+                step_id="settings",
+                data_schema=_settings_schema(self._pending_model, self._pending_settings),
+                errors={"base": "no_voices_for_language"},
+                description_placeholders={"model": MODELS.get(self._pending_model, self._pending_model)},
+            )
+
         if user_input is not None:
             action = user_input.get("voice_action", "save")
 
@@ -355,7 +375,6 @@ class CartesiaTTSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             voice_id = user_input.get(CONF_DEFAULT_VOICE, "none")
             if voice_id == "none":
-                # User submitted without selecting a voice - show error.
                 return self.async_show_form(
                     step_id="voice",
                     data_schema=_voice_schema(filtered),
@@ -363,9 +382,6 @@ class CartesiaTTSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     description_placeholders={"voice_count": str(len(filtered)), "language": lang_label},
                 )
 
-            # filtered is already {id: name} for the current language; fall back
-            # to a full scan of _voices_raw if the voice isn't in the filtered set
-            # (e.g. user typed an override ID not in the current language).
             all_voices = {**{v["id"]: v.get("name", v["id"]) for v in self._voices_raw if "id" in v}, **filtered}
             return self.async_create_entry(
                 title="Cartesia Sonic TTS",
@@ -493,8 +509,15 @@ class CartesiaTTSOptionsFlow(config_entries.OptionsFlow):
         filtered = _filter_voices_by_language(voices_raw, lang)
         lang_label = _languages_for_model(self._pending_model).get(lang, lang)
 
+        if not filtered:
+            return self.async_show_form(
+                step_id="settings",
+                data_schema=_settings_schema(self._pending_model, self._pending_settings),
+                errors={"base": "no_voices_for_language"},
+                description_placeholders={"model": MODELS.get(self._pending_model, self._pending_model)},
+            )
+
         current_voice_id = current.get(CONF_VOICE_ID, "")
-        # Keep the current voice in the list only if the language hasn't changed.
         if lang == prev_lang and current_voice_id and current_voice_id not in filtered:
             filtered[current_voice_id] = current.get(CONF_VOICE_NAME, current_voice_id)
         default_voice = current_voice_id if (lang == prev_lang and current_voice_id) else "none"

@@ -37,6 +37,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import CartesiaClient, CartesiaApiError, CartesiaAuthError
@@ -112,10 +113,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     Called by HA when the integration is first added or after a restart.
     Creates the API client, validates the key, and registers the TTS platform
     entity. The voice cache is intentionally left empty at this point and
-    populated lazily on first use (either via tts.speak or the Configure
-    dialog) to avoid an unnecessary API call on every HA restart.
+    populated lazily on first use (either via the HA voice browser or the
+    Configure dialog) to avoid an unnecessary API call on every HA restart.
 
-    Returns False (and logs an error) if the API key is rejected.
+    Raises ConfigEntryAuthFailed on invalid API key (triggers HA reauth UI).
+    Raises ConfigEntryNotReady on transient API errors (HA retries automatically).
     """
     api_key = entry.data[CONF_API_KEY]
     session = async_get_clientsession(hass)
@@ -123,9 +125,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         await client.validate_api_key()
+    except CartesiaAuthError as err:
+        raise ConfigEntryAuthFailed(f"Invalid Cartesia API key: {err}") from err
     except CartesiaApiError as err:
-        _LOGGER.error("Cartesia TTS setup failed: %s", err)
-        return False
+        raise ConfigEntryNotReady(f"Cartesia API unavailable: {err}") from err
 
     voice_cache = VoiceCache(hass, client)
 

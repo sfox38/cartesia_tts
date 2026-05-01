@@ -67,7 +67,6 @@ from .const import (
     ATTR_VOICE_ID,
     ATTR_LANGUAGE,
     ATTR_MODEL,
-    LANGUAGES,
     SONIC3_LANGUAGES,
     SONIC3_EMOTIONS,
     MODELS,
@@ -135,18 +134,18 @@ def _validate_options(
     else:
         result["model"] = config_opts.get(CONF_MODEL, DEFAULT_MODEL)
 
-    # voice_id - just check it's a non-empty string if provided
-    if ATTR_VOICE_ID in opts:
-        val = opts[ATTR_VOICE_ID]
-        if not isinstance(val, str) or not val.strip():
+    # voice_id - check ATTR_VOICE_ID first, then ATTR_VOICE (HA voice picker)
+    voice_raw = opts.get(ATTR_VOICE_ID) or opts.get(ATTR_VOICE)
+    if voice_raw is not None:
+        if not isinstance(voice_raw, str) or not voice_raw.strip():
             fallback = config_opts.get(CONF_VOICE_ID, "")
             _LOGGER.warning(
                 "Cartesia TTS: invalid voice_id %r (must be a non-empty string). Using configured default.",
-                val,
+                voice_raw,
             )
             result["voice_id"] = fallback
         else:
-            result["voice_id"] = val.strip()
+            result["voice_id"] = voice_raw.strip()
     else:
         result["voice_id"] = config_opts.get(CONF_VOICE_ID, "")
 
@@ -269,6 +268,7 @@ class CartesiaTTSEntity(TextToSpeechEntity):
     def supported_options(self) -> list[str]:
         """Option keys accepted in the tts.speak options dict."""
         return [
+            ATTR_VOICE,
             ATTR_VOICE_ID,
             ATTR_LANGUAGE,
             ATTR_MODEL,

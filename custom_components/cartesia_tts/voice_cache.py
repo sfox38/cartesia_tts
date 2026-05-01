@@ -2,9 +2,9 @@
 
 The full voice library (~600-700 entries) is fetched on demand and held
 in memory for the lifetime of the HA session. The cache starts empty and
-is populated in one situation only: when the user opens the Configure
-dialog (async_ensure_loaded is called by the options flow before rendering
-the voice dropdown).
+is populated on first use: either when the user opens the Configure
+dialog, or when HA calls async_get_voices to list available voices in
+the UI.
 
 Voices are NOT fetched on HA startup. This avoids a gratuitous API call
 on every restart. Since the cache is cleared on every HA restart, any
@@ -16,12 +16,12 @@ The cache is intentionally simple: no TTL, no disk persistence.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, VOICE_CACHE_KEY
 from .api import CartesiaClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +38,7 @@ class VoiceCache:
         self._hass = hass
         self._client = client
         self._voices: list[dict[str, Any]] = []
+        self._load_lock = asyncio.Lock()
 
     @property
     def voices(self) -> list[dict[str, Any]]:
@@ -52,15 +53,14 @@ class VoiceCache:
 
     async def async_ensure_loaded(self) -> None:
         """Fetch voices if the cache is empty. No-op if already populated."""
-        if not self._voices:
-            await self.async_refresh()
+        if self._voices:
+            return
+        async with self._load_lock:
+            if not self._voices:
+                await self.async_refresh()
 
     def get_voices_for_language(self, language: str) -> list[dict[str, Any]]:
-        """Return voices whose language field starts with the given ISO code.
-
-        Uses prefix matching so "en" matches both "en" and "en-US" if Cartesia
-        ever adds dialect codes to voice objects.
-        """
+        """Return voices whose language field starts with the given ISO code."""
         return [
             v for v in self._voices
             if self._voice_supports_language(v, language)
@@ -69,61 +69,6 @@ class VoiceCache:
     def get_all_voices(self) -> list[dict[str, Any]]:
         """Return a shallow copy of the full voice list."""
         return list(self._voices)
-
-    def find_voice_by_id(self, voice_id: str) -> dict[str, Any] | None:
-        """Return the voice dict for a given ID, or None if not found."""
-        for v in self._voices:
-            if v.get("id") == voice_id:
-                return v
-        return None
-
-    def find_voice_by_name(self, name: str) -> dict[str, Any] | None:
-        """Return the first voice whose name matches case-insensitively."""
-        name_lower = name.lower()
-        for v in self._voices:
-            if v.get("name", "").lower() == name_lower:
-                return v
-        return None
-
-    def search_voices(self, query: str, language: str | None = None) -> list[dict[str, Any]]:
-        """Return voices whose name or description contains the query string.
-
-        Optionally pre-filters by language before applying the text search.
-        """
-        query_lower = query.lower()
-        results = []
-        for v in self._voices:
-            if language and not self._voice_supports_language(v, language):
-                continue
-            name = v.get("name", "").lower()
-            description = v.get("description", "").lower()
-            if query_lower in name or query_lower in description:
-                results.append(v)
-        return results
-
-    def build_voice_options(
-        self,
-        language: str | None = None,
-        search: str | None = None,
-    ) -> dict[str, str]:
-        """Return a {voice_id: voice_name} dict suitable for a UI selector.
-
-        Applies optional language and text-search filters.
-        """
-        voices = self._voices
-
-        if language:
-            voices = [v for v in voices if self._voice_supports_language(v, language)]
-
-        if search:
-            search_lower = search.lower()
-            voices = [
-                v for v in voices
-                if search_lower in v.get("name", "").lower()
-                or search_lower in v.get("description", "").lower()
-            ]
-
-        return {v["id"]: v.get("name", v["id"]) for v in voices if "id" in v}
 
     def _voice_supports_language(self, voice: dict[str, Any], language: str) -> bool:
         """Return True if this voice supports the given ISO 639-1 language code.

@@ -1,7 +1,7 @@
 {
   "domain": "cartesia_tts",
   "name": "Cartesia Sonic TTS",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "documentation": "https://github.com/sfox38/cartesia_tts",
   "issue_tracker": "https://github.com/sfox38/cartesia_tts/issues",
   "requirements": [],

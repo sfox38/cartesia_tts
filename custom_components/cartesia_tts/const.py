@@ -116,7 +116,7 @@ LANGUAGES_BY_MODEL = {
     "sonic-turbo": TURBO_LANGUAGES,
 }
 
-# Convenience alias used by tts.py for the full supported_languages list.
+# Convenience alias for the full supported_languages list (superset of all models).
 LANGUAGES = SONIC3_LANGUAGES
 
 # All emotion values accepted by the Cartesia generation_config.emotion field
@@ -197,6 +197,3 @@ SPEED_MIN = 0.6
 SPEED_MAX = 1.5
 VOLUME_MIN = 0.5
 VOLUME_MAX = 2.0
-
-# Key used to store the VoiceCache instance in hass.data.
-VOICE_CACHE_KEY = "cartesia_voice_cache"

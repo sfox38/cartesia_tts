@@ -44,7 +44,8 @@
     "error": {
       "invalid_auth": "That API key was not accepted by Cartesia. Please double-check your key at [play.cartesia.ai/keys](https://play.cartesia.ai/keys) and try again.",
       "cannot_connect": "Could not reach the Cartesia API. Please check your internet connection and try again.",
-      "voice_required": "Please select a voice before saving."
+      "voice_required": "Please select a voice before saving.",
+      "no_voices_for_language": "No voices available for the selected language. Please choose a different language."
     },
     "abort": {
       "already_configured": "Cartesia Sonic TTS is already configured. Only one instance is supported. To change settings, use the Configure button on the existing integration."
@@ -85,7 +86,8 @@
       }
     },
     "error": {
-      "voice_required": "Please select a voice before saving."
+      "voice_required": "Please select a voice before saving.",
+      "no_voices_for_language": "No voices available for the selected language. Please choose a different language."
     }
   }
 }

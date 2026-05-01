@@ -7,7 +7,7 @@ API reference: https://docs.cartesia.ai/api-reference/tts/bytes
 
 Error handling
 --------------
-The Cartesia API returns structured JSON errors (Cartesia-Version 2026-03-01+):
+The Cartesia API returns structured JSON errors:
   {
     "error_code": "quota_exceeded",
     "title": "Quota exceeded",
@@ -35,6 +35,9 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+_MAX_VOICE_PAGES = 50
 
 
 class CartesiaApiError(Exception):
@@ -118,7 +121,7 @@ class CartesiaClient:
         """
         url = f"{CARTESIA_API_BASE}{CARTESIA_VOICES_ENDPOINT}"
         try:
-            async with self._session.get(url, headers=self._base_headers) as resp:
+            async with self._session.get(url, headers=self._base_headers, timeout=_REQUEST_TIMEOUT) as resp:
                 if resp.status == 401:
                     raise CartesiaAuthError("Invalid API key")
                 if resp.status != 200:
@@ -146,13 +149,22 @@ class CartesiaClient:
         starting_after: str | None = None
 
         try:
+            pages_fetched = 0
             while True:
+                pages_fetched += 1
+                if pages_fetched > _MAX_VOICE_PAGES:
+                    _LOGGER.warning(
+                        "Cartesia /voices pagination exceeded %d pages, stopping",
+                        _MAX_VOICE_PAGES,
+                    )
+                    break
+
                 params: dict[str, Any] = {"limit": 100}
                 if starting_after:
                     params["starting_after"] = starting_after
 
                 async with self._session.get(
-                    url, headers=self._base_headers, params=params
+                    url, headers=self._base_headers, params=params, timeout=_REQUEST_TIMEOUT,
                 ) as resp:
                     if resp.status == 401:
                         raise CartesiaAuthError("Invalid API key")
@@ -250,11 +262,15 @@ class CartesiaClient:
             "generation_config": generation_config,
         }
 
-        _LOGGER.debug("Cartesia TTS request payload: %s", payload)
+        transcript_preview = transcript[:50] + "..." if len(transcript) > 50 else transcript
+        _LOGGER.debug(
+            "Cartesia TTS request: model=%s voice=%s lang=%s transcript=%r",
+            model, voice_id, language, transcript_preview,
+        )
 
         try:
             async with self._session.post(
-                url, headers=self._base_headers, json=payload
+                url, headers=self._base_headers, json=payload, timeout=_REQUEST_TIMEOUT,
             ) as resp:
                 if resp.status == 401:
                     raise CartesiaAuthError("Invalid API key")
